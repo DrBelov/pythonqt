@@ -45,11 +45,11 @@ macx {
     DEBUG_EXT = 
   }
 
-  win32:INCLUDEPATH += $$PWD/../../Python-3.11.1/PC \
-                       $$PWD/../../Python-3.11.1/Include \
-                       $$PWD/../../Python-3.11.1/Include/cpython \
-                       $$PWD/../../Python-3.11.1/Lib/site-packages/pybind11/include/pybind11
-  win32:LIBS += $$PWD/../../Python-3.11.1/PCbuild/amd64/python$${PYTHON_VERSION}.dll#$${DEBUG_EXT}.lib
+  win32:INCLUDEPATH += $$PWD/../../win_python311/PC \
+                       $$PWD/../../win_python311/include \
+                       $$PWD/../../win_python311/include/cpython \
+                       $$PWD/../../win_python311/Lib/site-packages/pybind11/include/pybind11
+  win32:LIBS += $$PWD/../../win_python311/python$${PYTHON_VERSION}.dll#$${DEBUG_EXT}.lib
 
 } else:unix {
   # on linux, python-config is used to autodetect Python.

@@ -1,5 +1,5 @@
 # profile to include and link Python
-
+PYTHON_VERSION = 311
 
 # Change this variable to your python version (2.6, 2.7, 3.3, ...)
 isEmpty( PYTHON_VERSION ) {
@@ -40,13 +40,17 @@ macx {
 
   # check if debug or release
   CONFIG(debug, debug|release) {
-    DEBUG_EXT = _d 
+    DEBUG_EXT = _d
   } else {
     DEBUG_EXT = 
   }
 
-  win32:INCLUDEPATH += $$(PYTHON_PATH)/PC $$(PYTHON_PATH)/include
-  win32:LIBS += $$(PYTHON_LIB)/python$${PYTHON_VERSION}$${DEBUG_EXT}.lib
+  win32:INCLUDEPATH += $$PWD/../../Python-3.11.1/PC \
+                       $$PWD/../../Python-3.11.1/Include \
+                       $$PWD/../../Python-3.11.1/Include/cpython \
+                       $$PWD/../../Python-3.11.1/Lib/site-packages/pybind11/include/pybind11
+  win32:LIBS += $$PWD/../../Python-3.11.1/PCbuild/amd64/python$${PYTHON_VERSION}.dll#$${DEBUG_EXT}.lib
+
 } else:unix {
   # on linux, python-config is used to autodetect Python.
   # make sure that you have installed a matching python-dev package.

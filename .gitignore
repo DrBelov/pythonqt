@@ -88,3 +88,6 @@ doxygen.log
 
 # Backup files
 *.bak
+
+# Release files
+release/

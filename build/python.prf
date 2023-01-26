@@ -45,11 +45,21 @@ macx {
     DEBUG_EXT = 
   }
 
-  win32:INCLUDEPATH += $$PWD/../../win_python311/PC \
-                       $$PWD/../../win_python311/include \
-                       $$PWD/../../win_python311/include/cpython \
-                       $$PWD/../../win_python311/Lib/site-packages/pybind11/include/pybind11
-  win32:LIBS += $$PWD/../../win_python311/python$${PYTHON_VERSION}.dll#$${DEBUG_EXT}.lib
+  # For windows build:
+  # 1. Install python-3.11.1-amd64 with debug /Include_debug=1/ (https://docs.python.org/3/using/windows.html).
+  #    Debug Python version will be python311_d.dll, release python311.dll. Without python311_d.dll it is impossible to
+  #    build debug version of PythonQt.
+  # 2. Install pybind11 using pip ('pip install pybind11' in cmd). It is needed for eval.h file only. You can find
+  #    this header by yourself, dont forget to add INCLUDEPATH.
+  # 3. Set PYTHON_PATH (usually C:/Users/$${username}/AppData/Local/Programs/Python/Python311).
+  # 4. Written above is applicable to other versions of python. Then change PYTHON_VERSION to actual in the beginning
+  #    of this file.
+  PYTHON_PATH = C:/Users/$${username}/AppData/Local/Programs/Python/Python311
+  win32:INCLUDEPATH += $${PYTHON_PATH}/include \
+                       $${PYTHON_PATH}/include/cpython \
+                       $${PYTHON_PATH}/Lib/site-packages/pybind11/include/pybind11
+
+  win32:LIBS += $${PYTHON_PATH}/python$${PYTHON_VERSION}$${DEBUG_EXT}.dll
 
 } else:unix {
   # on linux, python-config is used to autodetect Python.

@@ -2371,27 +2371,27 @@ QString PythonQtPrivate::getSignature(PyObject* object)
       // NOTE: This implementation is based on function getargs() in inspect.py.
       //       inspect.getargs() can handle anonymous (tuple) arguments, while this code does not.
       //       It can be implemented, but it may be rarely needed and not necessary.
-//      PyCodeObject* code = (PyCodeObject*)func->func_code;
-//      if (code->co_varnames) {
-//        int nargs = code->co_argcount;
-//        Q_ASSERT(PyTuple_Check(code->co_varnames));
-//        for (int i=0; i<nargs; i++) {
-//          PyObject* name = PyTuple_GetItem(code->co_varnames, i);
-//          Q_ASSERT(PyString_Check(name));
-//          arguments << PyString_AsString(name);
-//        }
-//        if (code->co_flags & CO_VARARGS) {
-//          PyObject* s = PyTuple_GetItem(code->co_varnames, nargs);
-//          Q_ASSERT(PyString_Check(s));
-//          varargs = PyString_AsString(s);
-//          nargs += 1;
-//        }
-//        if (code->co_flags & CO_VARKEYWORDS) {
-//          PyObject* s = PyTuple_GetItem(code->co_varnames, nargs);
-//          Q_ASSERT(PyString_Check(s));
-//          varkeywords = PyString_AsString(s);
-//        }
-//      }
+      PyCodeObject* code = (PyCodeObject*)func->func_code;
+      if (PyCode_GetVarnames(code)) {
+        int nargs = code->co_argcount;
+        Q_ASSERT(PyTuple_Check(PyCode_GetVarnames(code)));
+        for (int i=0; i<nargs; i++) {
+          PyObject* name = PyTuple_GetItem(PyCode_GetVarnames(code), i);
+          Q_ASSERT(PyString_Check(name));
+          arguments << PyString_AsString(name);
+        }
+        if (code->co_flags & CO_VARARGS) {
+          PyObject* s = PyTuple_GetItem(PyCode_GetVarnames(code), nargs);
+          Q_ASSERT(PyString_Check(s));
+          varargs = PyString_AsString(s);
+          nargs += 1;
+        }
+        if (code->co_flags & CO_VARKEYWORDS) {
+          PyObject* s = PyTuple_GetItem(PyCode_GetVarnames(code), nargs);
+          Q_ASSERT(PyString_Check(s));
+          varkeywords = PyString_AsString(s);
+        }
+      }
       
       PyObject* defaultsTuple = func->func_defaults;
       if (defaultsTuple) {

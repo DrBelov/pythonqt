@@ -1,5 +1,12 @@
 # profile to include and link Python
-PYTHON_VERSION = 311
+win32 {
+    PYTHON_VERSION = 311
+} else:unix {
+    PYTHON_VERSION = 3.11
+} else {
+    PYTHON_VERSION = 311
+}
+
 
 # Change this variable to your python version (2.6, 2.7, 3.3, ...)
 isEmpty( PYTHON_VERSION ) {
@@ -10,34 +17,17 @@ isEmpty( PYTHON_VERSION ) {
   unix:PYTHON_VERSION=2.7
 }
 
-isEmpty( PYTHON_DIR ) {
-  PYTHON_DIR=$$(PYTHON_DIR)
-}
-!isEmpty( PYTHON_DIR ) {
-  PYTHON_DIR=$${PYTHON_DIR}/
-}
-
 message(Using Python version $${PYTHON_VERSION})
+
+# This lib was build with python3.11.1. The PyCode_GetVarnames() was introduced in 11 version and it made it necessary
+# to correct lines 2374 to 2394 in PythonQt.cpp. If you use earlier versions of python you may take the source code
+# of PythonQt from mevislab.
 
 macx {
   # for macx you need to have the Python development kit installed as framework
   INCLUDEPATH += /System/Library/Frameworks/Python.framework/Headers
   LIBS += -F/System/Library/Frameworks -framework Python
 } else:win32 {
-  # for windows install a Python development kit or build Python yourself from the sources
-  # Make sure that you set the environment variable PYTHON_PATH to point to your
-  # python installation (or the python sources/header files when building from source).
-  # Make sure that you set the environment variable PYTHON_LIB to point to
-  # the directory where the python libs are located.
-  #
-  # When using the prebuild Python installer, this will be:
-  # set PYTHON_PATH = c:\Python26
-  # set PYTHON_LIB  = c:\Python26\libs
-  #
-  # When using the python sources, this will be something like:
-  # set PYTHON_PATH = c:\yourDir\Python-2.6.1\
-  # set PYTHON_LIB  = c:\yourDir\Python-2.6.1\PCbuild8\Win32
-
   # check if debug or release
   CONFIG(debug, debug|release) {
     DEBUG_EXT = _d
@@ -62,13 +52,24 @@ macx {
   win32:LIBS += $${PYTHON_PATH}/python$${PYTHON_VERSION}$${DEBUG_EXT}.dll
 
 } else:unix {
-  # on linux, python-config is used to autodetect Python.
-  # make sure that you have installed a matching python-dev package.
+  # For linux build (tested on ubuntu 22.04):
+  # 1. Build python (3.11.1 tested) from source as it is told in README.rst of source package with the following changes:
+  #    ./configure --with-pydebug --enable-shared #(--with-pydebug installs debug libraries, --enable-shared builds .so libs instead of .a libs. --enable-shared makes your interpreter slower but allows to embed it to other applications)
+  #    make
+  #    make test
+  #    sudo make install
+  # 2. Install pybind11 using pip ('pip3 install pybind11' in cmd). It is needed for eval.h file only. You can find
+  #    this header by yourself, dont forget to add INCLUDEPATH.
+  #    Don't confuse ubuntu's embeded interpreter (python3.10 by default for ubuntu 22.04) and the one you have just installed.
+  #    Check python3 with the terminal.
+  # 3. Written above is applicable to other versions of python (probably). Then change PYTHON_VERSION to actual in the beginning
+  #    of this file.
   
   INCLUDEPATH += /usr/local/include/python3.11d \
                  /usr/local/include/python3.11d/cpython \
                  /usr/local/lib/python3.11/site-packages/pybind11/include/pybind11
 
+  # on linux, python-config is used to autodetect Python.
   PYTHON_CONFIG = /usr/local/bin/python$${PYTHON_VERSION}-config
   system($${PYTHON_CONFIG} --embed --libs) {
     unix:LIBS += $$system($${PYTHON_CONFIG} --embed --libs)

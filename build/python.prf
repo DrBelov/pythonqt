@@ -1,5 +1,15 @@
 # profile to include and link Python
+win32 {
+    PYTHON_VERSION_CMD = $$system(python --version) #Python X.XX.X
+}
+unix {
+    PYTHON_VERSION_CMD = $$system(python3 --version) #Python X.XX.X
+}
 
+VERSION_FULL = $$last(PYTHON_VERSION_CMD) # X.XX.X
+VERSION_SPLIT = $$split(VERSION_FULL, .)  # list[X XX X]
+VERSION_MAJOR_MINOR = $$member(VERSION_SPLIT,0,1)#list[X XX]
+PYTHON_VERSION = $$take_first(VERSION_MAJOR_MINOR).$$take_last(VERSION_MAJOR_MINOR) #X.XX
 
 # Change this variable to your python version (2.6, 2.7, 3.3, ...)
 isEmpty( PYTHON_VERSION ) {
@@ -72,6 +82,7 @@ contains(PKGCONFIG, "python.*"){
     DEBUG_EXT = 
   }
 
+  PYTHON_PATH = C:/Users/$$(USERNAME)/AppData/Local/Programs/Python/Python$${PYTHON_VERSION_MAJOR}$${PYTHON_VERSION_MINOR}
   isEmpty(PYTHON_PATH):PYTHON_PATH=$(PYTHON_PATH)
   isEmpty(PYTHON_PATH)|!exists("$$PYTHON_PATH\\include") | !exists("$$PYTHON_PATH\\libs\\") {
      error("PYTHON_PATH must be set to correct folder with \\libs and \\include subfolders ")

@@ -29,7 +29,7 @@ isEmpty( PYTHONQTALL_CONFIG ) {
 TARGET   = PythonQt_QtAll-Qt5-PythonXY
 TEMPLATE = lib
 
-DESTDIR    = ../../lib
+DESTDIR    = $$OUT_PWD/../../lib
 
 include ( ../../build/common.prf )  
 include ( ../../build/PythonQt.prf )  
@@ -62,13 +62,17 @@ unix {
   QMAKE_PKGCONFIG_VERSION = $$VERSION
 }
 
+INSTALL_PREFIX = $$DESTDIR/../../../appdesktop/plugins/pyscript
+
 unix: target.path = $${INSTALL_PREFIX}/lib
-win32: target.path = /
+win32: target.path = $${INSTALL_PREFIX}/bin
 
 headers.files = $${HEADERS}
 headers.path = $${INSTALL_PREFIX}/include
 
-INSTALLS += target headers
+INSTALLS += \
+    target\
+    #headers
 
 defineTest(Xinclude) {
   f=$$PYTHONQT_GENERATED_PATH/$$1/$${1}.pri

@@ -7,7 +7,7 @@ win32 {
         message(Python is installed - build started)
         TEMPLATE = subdirs
 
-        SUBDIRS = src extensions tests
+        SUBDIRS = src extensions
         tests.depends += src extensions
         extensions.depends += src
         examples.depends += src extensions
@@ -31,7 +31,7 @@ unix {
         message(Python is installed - build started)
         TEMPLATE = subdirs
 
-        SUBDIRS = src extensions tests
+        SUBDIRS = src extensions
         tests.depends += src extensions
         extensions.depends += src
         examples.depends += src extensions
@@ -39,7 +39,7 @@ unix {
 
     equals(PYTHON_INSTALLED, False) {
         message(Python is not installed - build aborted)
-}
+    }
 }
 
 

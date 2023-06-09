@@ -7,7 +7,7 @@
 TARGET   = PythonQt-Qt5-PythonXY
 TEMPLATE = lib
 
-DESTDIR    = ../lib
+DESTDIR    = $$OUT_PWD/../lib
 
 CONFIG += qt
 CONFIG -= flat
@@ -51,10 +51,14 @@ unix {
   QMAKE_PKGCONFIG_VERSION = $$VERSION
 }
 
-unix: target.path = $${INSTALL_PREFIX}/lib
-win32: target.path = /
+INSTALL_PREFIX = $$DESTDIR/../../../appdesktop/plugins/pyscript
 
-headers.files = $${HEADERS} $$PWD/PythonQtPythonInclude.h
+unix: target.path = $${INSTALL_PREFIX}/lib
+win32: target.path = $${INSTALL_PREFIX}/bin
+
+headers.files = $${HEADERS}
 headers.path = $${INSTALL_PREFIX}/include
 
-INSTALLS += target headers
+INSTALLS += \
+    target\
+    #headers

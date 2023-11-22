@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <algorithm> // for std::sort, std::stable_sort
+
 #include "setupgenerator.h"
 #include "shellgenerator.h"
 #include "reporthandler.h"
@@ -65,7 +67,13 @@ static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
     }
   }
   QSet<QString> r;
-  for (QString op :  operatorCodes.toList()) {
+  for (QString op :
+#       if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+              operatorCodes.toList()
+#       else
+              QStringList(operatorCodes.begin(), operatorCodes.end())
+#       endif
+      ) {
     if (op == ">" || op == "<" || op == ">=" || op == "<=" || op == "==" || op == "!=") {
       r.insert("PythonQt::Type_RichCompare");
     } else if (op == "+") {
@@ -113,7 +121,7 @@ static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
     CodeSnipList code_snips = cls->typeEntry()->codeSnips();
     for (const CodeSnip &cs :  code_snips) {
       if (cs.language == TypeSystem::PyWrapperOperators) {
-        QStringList values = cs.code().split(" ", QString::SkipEmptyParts);
+        QStringList values = cs.code().split(" ", Qt::SkipEmptyParts);
         for (QString value :  values) {
           r.insert(value);
         }
@@ -122,14 +130,13 @@ static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
   }
 
 
-  QStringList result = r.toList();
-  qSort(result);
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+      QStringList result = r.toList();
+#else
+      QStringList result(r.begin(), r.end());
+#endif
+  std::sort(result.begin(), result.end());
   return result;
-}
-
-static bool class_less_than(const AbstractMetaClass *a, const AbstractMetaClass *b)
-{
-  return a->name() < b->name();
 }
 
 static QSet<QString> _builtinListTypes = QSet<QString>() << "QByteArray"
@@ -146,7 +153,10 @@ static QSet<QString> _builtinListTypes = QSet<QString>() << "QByteArray"
 << "QLineF"
 << "QPoint"
 << "QPointF"
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 << "QRegExp"
+#endif
+<< "QRegularExpression"
 << "QFont"
 << "QPixmap"
 << "QBrush"
@@ -163,7 +173,11 @@ static QSet<QString> _builtinListTypes = QSet<QString>() << "QByteArray"
 << "QPen"
 << "QTextLength"
 << "QTextFormat"
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 << "QMatrix"
+#endif
+<< "QTransform"
+<< "QMatrix4x4"
 << "QVariant";
 
 static void addListRegistration(AbstractMetaType* type, QSet<QString>& output) {
@@ -223,7 +237,7 @@ void SetupGenerator::generate()
       }
     }
   }
-  qSort(classes_with_polymorphic_id.begin(), classes_with_polymorphic_id.end(), class_less_than);
+  classes_with_polymorphic_id.sort();
 
   QHashIterator<QString, QList<const AbstractMetaClass*> > pack(packHash);
   while (pack.hasNext()) {
@@ -231,7 +245,7 @@ void SetupGenerator::generate()
     QList<const AbstractMetaClass*> list = pack.value();
     if (list.isEmpty())
       continue;
-    qSort(list.begin(), list.end(), class_less_than);
+    std::stable_sort(list.begin(), list.end(), AbstractMetaClass::less_than);
 
     QString packKey = pack.key();
     QString packName = pack.key();
@@ -271,7 +285,7 @@ void SetupGenerator::generate()
       s << "#include <PythonQt.h>" << endl;
       s << "#include <PythonQtConversion.h>" << endl;
 
-      for (int i=0; i<(list.count()+MAX_CLASSES_PER_FILE-1) / MAX_CLASSES_PER_FILE; i++) {
+      for (int i=0; i<(list.count()+ maxClassesPerFile -1) / maxClassesPerFile; i++) {
         s << "#include \"" << packKey << QString::number(i) << ".h\"" << endl;
       }
       s << endl;
@@ -374,7 +388,11 @@ void SetupGenerator::generate()
       }
       s << endl;
 
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
       QStringList list = listRegistration.toList();
+#else
+      QStringList list(listRegistration.begin(), listRegistration.end());
+#endif
       list.sort();
       Q_FOREACH(QString name, list) {
         if (name.contains("Ssl")) {

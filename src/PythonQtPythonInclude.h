@@ -33,13 +33,9 @@
 #ifndef __PythonQtPythonInclude_h
 #define __PythonQtPythonInclude_h
 
-// Undefine macros that Python.h defines to avoid redefinition warning.
+// Undefine macros that features.h defines to avoid redefinition warning
 #ifdef _POSIX_C_SOURCE
 #  undef _POSIX_C_SOURCE
-#endif
-
-#ifdef _POSIX_THREADS
-#  undef _POSIX_THREADS
 #endif
 
 #ifdef _XOPEN_SOURCE

@@ -4,7 +4,11 @@
 # $Source$
 # --------------------------------------------------
 
-TARGET   = PythonQt-Qt5-PythonXY
+contains(QT_MAJOR_VERSION, 6) {
+    TARGET = PythonQt-Qt6-PythonXY
+} else {
+    TARGET = PythonQt-Qt5-PythonXY
+}
 TEMPLATE = lib
 
 DESTDIR    = ../lib
@@ -25,11 +29,15 @@ isEmpty(PYTHONQT_STATIC) {
 
 DEFINES += PYTHONQT_CATCH_ALL_EXCEPTIONS
 
-contains(QT_MAJOR_VERSION, 5) {
-  QT += widgets core-private
-}
- 
+QT += widgets core-private
+
 INCLUDEPATH += $$PWD
+
+macx {
+  contains(QT_MAJOR_VERSION, 6) {
+    QMAKE_APPLE_DEVICE_ARCHS = x86_64 arm64
+  }
+}
 
 include ( ../build/common.prf )  
 include ( ../build/python.prf )

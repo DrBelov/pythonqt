@@ -112,8 +112,8 @@ static int PythonQtInstanceWrapper_setitem(PyObject* self, PyObject* index, PyOb
   PythonQtInstanceWrapper* wrapper = (PythonQtInstanceWrapper*)self;
   bool isSetItem = value;
   PythonQtMemberInfo opSlot = isSetItem ?
-	wrapper->classInfo()->member("__setitem__")
-	: wrapper->classInfo()->member("__delitem__");
+        wrapper->classInfo()->member("__setitem__")
+        : wrapper->classInfo()->member("__delitem__");
 
   if (opSlot._type == PythonQtMemberInfo::Slot) {
     PyObject* args = PyTuple_New(isSetItem?2:1);
@@ -462,10 +462,16 @@ static PyObject *PythonQtClassWrapper_getattro(PyObject *obj, PyObject *name)
       return objectDict;
     }
     PyObject* dict = PyDict_New();
-      
-    QSet<QString> completeSet = QSet<QString>::fromList(wrapper->classInfo()->memberList());
-    completeSet.unite(QSet<QString>::fromList(wrapper->classInfo()->propertyList()));
 
+    auto members = wrapper->classInfo()->memberList();
+    auto properties = wrapper->classInfo()->propertyList();
+#if QT_VERSION >= 0x060000
+    QSet<QString> completeSet(members.begin(), members.end());
+    completeSet.unite(QSet<QString>(properties.begin(), properties.end()));
+#else
+    QSet<QString> completeSet = QSet<QString>::fromList(members);
+    completeSet.unite(QSet<QString>::fromList(properties));
+#endif
     Q_FOREACH (QString name, completeSet) {
       if (name.startsWith("py_")) {
         // do not expose internal slots

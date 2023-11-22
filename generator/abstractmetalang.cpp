@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <algorithm> // for std::stable_sort
+
 #include "abstractmetalang.h"
 #include "reporthandler.h"
 
@@ -313,6 +315,8 @@ AbstractMetaFunction *AbstractMetaFunction::copy() const
     if (type())
         cpy->setType(type()->copy());
     cpy->setConstant(isConstant());
+    cpy->setConstexpr(isConstexpr());
+    cpy->setAuto(isAuto());
     cpy->setException(exception());
     cpy->setOriginalAttributes(originalAttributes());
 
@@ -364,6 +368,8 @@ QString AbstractMetaFunction::signature() const
 
     if (isConstant())
         s += " const";
+    if (isConstexpr())
+        s += " constexpr";
 
     return s;
 }
@@ -655,6 +661,8 @@ QString AbstractMetaFunction::minimalSignature() const
     minimalSignature += ")";
     if (isConstant())
         minimalSignature += "const";
+    if (isConstexpr())
+        minimalSignature += "constexpr";
 
     minimalSignature = TypeSystem::normalizedSignature(minimalSignature.toLocal8Bit().constData());
     m_cached_minimal_signature = minimalSignature;
@@ -972,7 +980,7 @@ AbstractMetaFunctionList AbstractMetaClass::virtualOverrideFunctions() const
 
 void AbstractMetaClass::sortFunctions()
 {
-    qSort(m_functions.begin(), m_functions.end(), function_sorter);
+    std::sort(m_functions.begin(), m_functions.end(), function_sorter);
 }
 
 void AbstractMetaClass::setFunctions(const AbstractMetaFunctionList &functions)
@@ -1090,7 +1098,7 @@ void AbstractMetaClass::addFunction(AbstractMetaFunction *function)
     if (!function->isDestructor()) {
         m_functions << function;
         // seems like this is not needed and takes a lot of performance
-        //qSort(m_functions.begin(), m_functions.end(), function_sorter);
+        //std::sort(m_functions.begin(), m_functions.end(), function_sorter);
     }
 
 
@@ -1195,7 +1203,7 @@ bool AbstractMetaClass::hasVirtualDestructor() const
 static bool functions_contains(const AbstractMetaFunctionList &l, const AbstractMetaFunction *func)
 {
     foreach (const AbstractMetaFunction *f, l) {
-		if ((f->compareTo(func) & AbstractMetaFunction::PrettySimilar) == AbstractMetaFunction::PrettySimilar)
+                if ((f->compareTo(func) & AbstractMetaFunction::PrettySimilar) == AbstractMetaFunction::PrettySimilar)
             return true;
     }
     return false;
@@ -2014,4 +2022,10 @@ AbstractMetaClass *AbstractMetaClassList::findClass(const QString &name) const
     }
 
     return 0;
+}
+
+
+void AbstractMetaClassList::sort(void)
+{
+   std::stable_sort(begin(), end(), AbstractMetaClass::less_than);
 }

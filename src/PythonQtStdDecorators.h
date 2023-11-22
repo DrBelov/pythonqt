@@ -58,6 +58,9 @@
 #include <QMetaMethod>
 #include <QMetaEnum>
 #include <QMetaProperty>
+#if QT_VERSION >= 0x060000
+#include <QRandomGenerator>
+#endif
 
 class PYTHONQT_EXPORT PythonQtStdDecorators : public QObject
 {
@@ -82,7 +85,7 @@ public Q_SLOTS:
   const QObjectList* children(QObject* o);
   QObject* findChild(QObject* parent, PyObject* type, const QString& name = QString());
   QList<QObject*> findChildren(QObject* parent, PyObject* type, const QString& name= QString());
-  QList<QObject*> findChildren(QObject* parent, PyObject* type, const QRegExp& regExp);
+  QList<QObject*> findChildren(QObject* parent, PyObject* type, const QRegularExpression& regExp);
 
   bool setProperty(QObject* o, const char* name, const QVariant& value);
   QVariant property(QObject* o, const char* name);
@@ -103,8 +106,24 @@ public Q_SLOTS:
   int static_Qt_qRound(double a) { return qRound(a); }
   qint64 static_Qt_qRound64(double a) { return qRound64(a); }
   const char* static_Qt_qVersion() { return qVersion(); }
-  int static_Qt_qrand() { return qrand(); }
-  void static_Qt_qsrand(uint a) { qsrand(a); }
+
+  int static_Qt_qrand()
+  {
+#if QT_VERSION < 0x060000
+    return qrand();
+#else
+    return QRandomGenerator::global()->generate();
+#endif
+  }
+
+  void static_Qt_qsrand(uint a)
+  {
+#if QT_VERSION < 0x060000
+    qsrand(a);
+#else
+    QRandomGenerator::global()->seed(a);
+#endif
+  }
 
   QString tr(QObject* obj, const QString& text, const QString& ambig = QString(), int n = -1);
 
@@ -116,7 +135,7 @@ public Q_SLOTS:
 private:
   QObject* findChild(QObject* parent, const char* typeName, const QMetaObject* meta, const QString& name);
   int findChildren(QObject* parent, const char* typeName, const QMetaObject* meta, const QString& name, QList<QObject*>& list);
-  int findChildren(QObject* parent, const char* typeName, const QMetaObject* meta, const QRegExp& regExp, QList<QObject*>& list);
+  int findChildren(QObject* parent, const char* typeName, const QMetaObject* meta, const QRegularExpression& regExp, QList<QObject*>& list);
 };
 
 class PythonQtSingleShotTimer : public QTimer

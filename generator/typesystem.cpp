@@ -51,6 +51,22 @@
 #include <QtXml>
 #include <qcompilerdetection.h> // Q_FALLTHROUGH
 
+/* This file needs to be rewritten as documented here:
+ *
+ * See: https://doc.qt.io/qt-6/xml-changes-qt6.html
+ *
+ * The rewrite may be backward compatible to Qt4.3 APIs because the base
+ * facilites (QXmlStreamReader) used to relace the 'SAX' parser were apparently
+ * available then.  Use of Xml5Compat is a work round until such a rewrite has
+ * been done.
+ */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+#   if defined(__GNUC__)
+#       pragma GCC warning "Qt6: implement Qt6 compatible XML reading"
+#   endif
+#   include <QtCore5Compat/QXmlDefaultHandler>
+#endif
+
 QString strings_Object = QLatin1String("Object");
 QString strings_String = QLatin1String("String");
 QString strings_Thread = QLatin1String("Thread");
@@ -137,8 +153,10 @@ class StackElement
 class Handler : public QXmlDefaultHandler
 {
 public:
-    Handler(TypeDatabase *database, bool generate)
-        : m_database(database), m_generate(generate ? TypeEntry::GenerateAll : TypeEntry::GenerateForSubclass)
+    Handler(TypeDatabase *database, unsigned int qtVersion, bool generate)
+        : m_database(database)
+        , m_qtVersion(qtVersion)
+        , m_generate(generate ? TypeEntry::GenerateAll : TypeEntry::GenerateForSubclass)
     {
         m_current_enum = 0;
         current = 0;
@@ -179,6 +197,7 @@ public:
         tagNames["reference-count"] = StackElement::ReferenceCount;
     }
 
+    bool startDocument() { m_nestingLevel = 0; m_disabledLevel = -1; return true; }
     bool startElement(const QString &namespaceURI, const QString &localName,
                       const QString &qName, const QXmlAttributes &atts);
     bool endElement(const QString &namespaceURI, const QString &localName, const QString &qName);
@@ -196,6 +215,7 @@ private:
 
     bool importFileElement(const QXmlAttributes &atts);
     bool convertBoolean(const QString &, const QString &, bool);
+    bool qtVersionMatches(const QXmlAttributes& atts, bool& ok);
 
     TypeDatabase *m_database;
     StackElement* current;
@@ -211,6 +231,10 @@ private:
     FieldModificationList m_field_mods;
 
     QHash<QString, StackElement::ElementType> tagNames;
+
+    unsigned int m_qtVersion{};
+    int m_nestingLevel{};  // current nesting level, needed to reset m_disabledLevel if leaving element
+    int m_disabledLevel{}; // if this is != 0, elements should be ignored
 };
 
 bool Handler::error(const QXmlParseException &e)
@@ -245,7 +269,7 @@ void Handler::fetchAttributeValues(const QString &name, const QXmlAttributes &at
         QString key = atts.localName(i).toLower();
         QString val = atts.value(i);
 
-        if (!acceptedAttributes->contains(key)) {
+        if (!acceptedAttributes->contains(key) && key != "after-version" && key != "before-version") {
             ReportHandler::warning(QString("Unknown attribute for '%1': '%2'").arg(name).arg(key));
         } else {
             (*acceptedAttributes)[key] = val;
@@ -256,7 +280,14 @@ void Handler::fetchAttributeValues(const QString &name, const QXmlAttributes &at
 bool Handler::endElement(const QString &, const QString &localName, const QString &)
 {
     QString tagName = localName.toLower();
-    if(tagName == "import-file")
+    int oldNestingLevel = m_nestingLevel--;
+    if (m_disabledLevel >= 0) {
+      if (m_disabledLevel == oldNestingLevel) {
+        m_disabledLevel = -1;
+      }
+      return true;
+    }
+    if(tagName == "import-file" || tagName == "group")
         return true;
 
     if (!current)
@@ -305,7 +336,7 @@ bool Handler::endElement(const QString &, const QString &localName, const QStrin
             m_code_snips.last().addTemplateInstance(current->value.templateInstance);
         }else if(current->parent->type == StackElement::Template){
             current->parent->value.templateEntry->addTemplateInstance(current->value.templateInstance);
-        }else if(current->parent->type == StackElement::CustomMetaConstructor || current->parent->type == StackElement::CustomMetaConstructor){
+        }else if(current->parent->type == StackElement::CustomMetaConstructor){
             current->parent->value.customFunction->addTemplateInstance(current->value.templateInstance);
         }else if(current->parent->type == StackElement::ConversionRule){
             m_function_mods.last().argument_mods.last().conversion_rules.last().addTemplateInstance(current->value.templateInstance);
@@ -438,15 +469,61 @@ bool Handler::convertBoolean(const QString &_value, const QString &attributeName
     }
 }
 
+bool Handler::qtVersionMatches(const QXmlAttributes& atts, bool& ok)
+{
+  ok = true;
+  int beforeIndex = atts.index("before-version");
+  if (beforeIndex >= 0) {
+    uint beforeVersion = TypeSystem::qtVersionFromString(atts.value(beforeIndex), ok);
+    if (ok) {
+      if (m_qtVersion >= beforeVersion) {
+        return false;
+      }
+    }
+    else {
+      m_error = "Invalid 'before-version' version string: " + atts.value(beforeIndex);
+    }
+  }
+  int afterIndex = atts.index("after-version"); // after-version really means this version or any version after
+  if (afterIndex >= 0) {
+    uint afterVersion = TypeSystem::qtVersionFromString(atts.value(afterIndex), ok);
+    if (ok) {
+      if (m_qtVersion < afterVersion) {
+        return false;
+      }
+    }
+    else {
+      m_error = "Invalid 'after-version' version string: " + atts.value(afterIndex);
+    }
+  }
+  return true;
+}
+
 bool Handler::startElement(const QString &, const QString &n,
                            const QString &, const QXmlAttributes &atts)
 {
     QString tagName = n.toLower();
-    if(tagName == "import-file"){
-        return importFileElement(atts);
+    m_nestingLevel++;
+    if (m_disabledLevel >= 0 && m_disabledLevel < m_nestingLevel) {
+        return true;
+    }
+    bool ok;
+    bool versionMatches = qtVersionMatches(atts, ok);
+    if (!ok) {
+        return false;  // abort
+    } else if (!versionMatches) {
+        m_disabledLevel = m_nestingLevel;
+        return true;
     }
 
-    std::auto_ptr<StackElement> element(new StackElement(current));
+    if (tagName == "import-file") {
+        return importFileElement(atts);
+    }
+    else if (tagName == "group") { // non-functional element to handle version ranges
+        return true;
+    }
+
+    std::unique_ptr<StackElement> element(new StackElement(current));
 
     if (!tagNames.contains(tagName)) {
         m_error = QString("Unknown tag name: '%1'").arg(tagName);
@@ -828,7 +905,7 @@ bool Handler::startElement(const QString &, const QString &n,
                     return false;
                 }
 
-                if (!m_database->parseFile(name, convertBoolean(attributes["generate"], "generate", true))) {
+                if (!m_database->parseFile(name, m_qtVersion, convertBoolean(attributes["generate"], "generate", true))) {
                     m_error = QString("Failed to parse: '%1'").arg(name);
                     return false;
                 }
@@ -1483,16 +1560,17 @@ TypeDatabase::TypeDatabase() : m_suppressWarnings(true)
     addRemoveFunctionToTemplates(this);
 }
 
-bool TypeDatabase::parseFile(const QString &filename, bool generate)
+bool TypeDatabase::parseFile(const QString &filename, unsigned int qtVersion, bool generate)
 {
     QFile file(filename);
+
     Q_ASSERT(file.exists());
     QXmlInputSource source(&file);
 
     int count = m_entries.size();
 
     QXmlSimpleReader reader;
-    Handler handler(this, generate);
+    Handler handler(this, qtVersion, generate);
 
     reader.setContentHandler(&handler);
     reader.setErrorHandler(&handler);
@@ -2031,3 +2109,27 @@ QByteArray TypeSystem::normalizedSignature(const char* signature)
   result.replace("QStringList<QString>", "QStringList");
   return result;
 }
+
+unsigned int TypeSystem::qtVersionFromString(const QString& value, bool& ok)
+{
+  ok = true;
+  QList<uint> values;
+  for (QString dotValue : value.split('.'))
+  {
+    dotValue = dotValue.trimmed();
+    bool ok2;
+    values.append(dotValue.toUInt(&ok2));
+    if (!ok2) {
+      ok = false;
+    }
+  }
+  uint result = values[0] << 16;
+  if (values.size() >= 2) {
+    result += values[1] << 8;
+  }
+  if (values.size() >= 3) {
+    result += values[2];
+  }
+  return result;
+}
+

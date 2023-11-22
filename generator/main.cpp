@@ -39,20 +39,61 @@
 **
 ****************************************************************************/
 
+#include <cstdio>
+
 #include "main.h"
 #include "asttoxml.h"
 #include "reporthandler.h"
 #include "typesystem.h"
 #include "generatorset.h"
 #include "fileout.h"
+#include "control.h"
 
 #include <QDir>
+#include <QFileInfo>
+#include <QFile>
+#include <QTextStream>
+#include <QRegularExpression>
 
 void displayHelp(GeneratorSet *generatorSet);
+
+static unsigned int getQtVersion(const QString& commandLineIncludes)
+{
+  QRegularExpression re("#define\\s+QTCORE_VERSION\\s+0x([0-9a-f]+)", QRegularExpression::CaseInsensitiveOption);
+  for (const QString& includeDir : Preprocess::getIncludeDirectories(commandLineIncludes)) {
+    QFileInfo fi(QDir(includeDir), "qtcoreversion.h");
+    if (fi.exists()) {
+      QString filePath = fi.absoluteFilePath();
+      QFile f(filePath);
+      if (f.open(QIODevice::ReadOnly)) {
+        QTextStream ts(&f);
+        QString content = ts.readAll();
+        f.close();
+        auto match = re.match(content);
+        if (match.isValid()) {
+          unsigned int result;
+          bool ok;
+          result = match.captured(1).toUInt(&ok, 16);
+          if (!ok) {
+            printf("Could not parse Qt version in file [%s] (looked for #define QTCORE_VERSION)\n",
+              qPrintable(filePath));
+          }
+          return result;
+        }
+      }
+    }
+  }
+  printf("Error: Could not find Qt version (looked for qtcoreversion.h in %s)\n",
+    qPrintable(commandLineIncludes));
+  return 0;
+}
+
 
 #include <QDebug>
 int main(int argc, char *argv[])
 {
+    ReportHandler::setContext("Arguments");
+
     QScopedPointer<GeneratorSet> gs(GeneratorSet::getInstance());
 
     QString default_file = ":/trolltech/generator/qtscript_masterinclude.h";
@@ -64,6 +105,7 @@ int main(int argc, char *argv[])
     QStringList rebuild_classes;
 
     QMap<QString, QString> args;
+    unsigned int qtVersion{};
 
     int argNum = 0;
     for (int i=1; i<argc; ++i) {
@@ -98,6 +140,10 @@ int main(int argc, char *argv[])
             ReportHandler::setDebugLevel(ReportHandler::FullDebug);
     }
 
+    if (args.contains("print-parser-errors")) {
+      Control::setPrintErrors(true);
+    }
+
     if (args.contains("dummy")) {
         FileOut::dummy = true;
     }
@@ -110,8 +156,17 @@ int main(int argc, char *argv[])
         FileOut::license = true;
 
     if (args.contains("rebuild-only")) {
-        QStringList classes = args.value("rebuild-only").split(",", QString::SkipEmptyParts);
+        QStringList classes = args.value("rebuild-only").split(",", Qt::SkipEmptyParts);
         TypeDatabase::instance()->setRebuildClasses(classes);
+    }
+
+    if (args.contains("qt-version")) {
+        bool ok;
+        qtVersion = TypeSystem::qtVersionFromString(args.value("qt-version"), ok);
+        if (!ok || qtVersion < 0x050000) {
+            printf("Invalid Qt version specified, will look into header files for version...\n");
+            qtVersion = 0;
+        }
     }
 
     fileName = args.value("arg-1");
@@ -134,12 +189,26 @@ int main(int argc, char *argv[])
 
     printf("Please wait while source files are being generated...\n");
 
+    if (!qtVersion) {
+        printf("Trying to determine Qt version...\n");
+        qtVersion = getQtVersion(args.value("include-paths"));
+        if (!qtVersion)
+        {
+            fprintf(stderr, "Aborting\n"); // the error message was printed by getQtVersion
+            return 1;
+        }
+        printf("Determined Qt version is %d.%d.%d\n", qtVersion >> 16, (qtVersion >> 8) & 0xFF, qtVersion & 0xFF);
+    }
+
     printf("Parsing typesystem file [%s]\n", qPrintable(typesystemFileName));
-    if (!TypeDatabase::instance()->parseFile(typesystemFileName))
+    fflush(stdout);
+    ReportHandler::setContext("Typesystem");
+    if (!TypeDatabase::instance()->parseFile(typesystemFileName, qtVersion))
         qFatal("Cannot parse file: '%s'", qPrintable(typesystemFileName));
 
     printf("PreProcessing - Generate [%s] using [%s] and include-paths [%s]\n",
       qPrintable(pp_file), qPrintable(fileName), qPrintable(args.value("include-paths")));
+    ReportHandler::setContext("Preprocess");
     if (!Preprocess::preprocess(fileName, pp_file, args.value("include-paths"))) {
         fprintf(stderr, "Preprocessor failed on file: '%s'\n", qPrintable(fileName));
         return 1;
@@ -148,16 +217,19 @@ int main(int argc, char *argv[])
     if (args.contains("ast-to-xml")) {
       printf("Running ast-to-xml on file [%s] using pp_file [%s] and include-paths [%s]\n",
         qPrintable(fileName), qPrintable(pp_file), qPrintable(args.value("include-paths")));
+      ReportHandler::setContext(QString("AST-to-XML"));
       astToXML(pp_file);
       return 0;
     }
 
     printf("Building model using [%s]\n", qPrintable(pp_file));
+    ReportHandler::setContext("Build");
     gs->buildModel(pp_file);
     if (args.contains("dump-object-tree")) {
         gs->dumpObjectTree();
         return 0;
     }
+    ReportHandler::setContext("Generate");
     printf("%s\n", qPrintable(gs->generate()));
 
     printf("Done, %d warnings (%d known issues)\n", ReportHandler::warningCount(),
@@ -175,11 +247,13 @@ void displayHelp(GeneratorSet* generatorSet) {
     printf("Available options:\n\n");
     printf("General:\n");
     printf("  --debug-level=[sparse|medium|full]        \n"
+           "  --print-parser-errors                     \n"
            "  --dump-object-tree                        \n"
            "  --help, -h or -?                          \n"
            "  --no-suppress-warnings                    \n"
            "  --output-directory=[dir]                  \n"
            "  --include-paths=<path>[%c<path>%c...]     \n"
+           "  --qt-version=x.y.z                        \n"
            "  --print-stdout                            \n",
            path_splitter, path_splitter);
 

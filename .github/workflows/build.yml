@@ -15,11 +15,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        container: 
-        - 'ubuntu:20.04'
-        - 'ubuntu:22.04'
+        container_version:
+        - '20.04'
+        - '22.04'
     runs-on: ubuntu-latest
-    container: ${{ matrix.container }}
+    container: ubuntu:${{ matrix.container_version }}
     steps:
     - name: Install Qt
       run: |
@@ -45,7 +45,7 @@ jobs:
         apt-get clean
       
     - name: Checkout PythonQt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build PythonQt
       run: |
@@ -53,11 +53,12 @@ jobs:
         echo ======= SYSTEM INFO ========
         uname -a; gcc --version | grep "gcc"; python3 --version; qmake --version
         echo ============================
-        qmake -r PythonQt.pro CONFIG+=release CONFIG+=sanitizer CONFIG+=sanitize_undefined \
+        qmake -r PythonQt.pro CONFIG+=release CONFIG+=force_debug_info \
+        CONFIG+=sanitizer CONFIG+=sanitize_undefined CONFIG+=sanitize_address \
         PYTHON_VERSION=$(python3 --version | cut -d " " -f 2 | cut -d "." -f1,2) \
         PYTHON_DIR=$(which python3 | xargs dirname | xargs dirname)
-        make -j 2
-        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        make -j $(nproc)
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
           make check TESTARGS="-platform offscreen"
       
     - name: Generate Wrappers
@@ -66,31 +67,30 @@ jobs:
         mkdir /usr/include/qt5; ln -s /usr/include/x86_64-linux-gnu/qt5 /usr/include/qt5/include
         export QTDIR=/usr/include/qt5
         cd generator
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
         ./pythonqt_generator
 
     - name: Upload Wrappers
       uses: actions/upload-artifact@v3
-      if: ${{ matrix.container }} == 'ubuntu:20.04'
       with:
-        name: wrappers_ubuntu_20_04
+        name: wrappers_ubuntu_${{ matrix.container_version }}
         path: generated_cpp
 
-    - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
-      if: ${{ matrix.container }} == 'ubuntu:22.04'
-      with:
-        name: wrappers_ubuntu_22_04
-        path: generated_cpp
-
-  centos:
+  oldschool:
     strategy:
       fail-fast: false
       matrix:
-        container:
-        - 'centos:7'
+        container_os: ['centos']
+        container_os_version: ['7']
+        container_os_python_package: ['python-debug']
         configuration: ['debug', 'release']
+        include:
+          - container_os: 'rockylinux'
+            container_os_version: '9'
+            container_os_python_package: 'python3-devel'
+            configuration: 'release'
     runs-on: ubuntu-latest
-    container: ${{ matrix.container }}
+    container: '${{ matrix.container_os }}:${{ matrix.container_os_version }}'
     steps:
     - name: Install Qt
       run: |
@@ -98,7 +98,7 @@ jobs:
         yum groupinstall "Development Tools" -y
         yum install -y \
         which \
-        python-debug \
+        ${{ matrix.container_os_python_package }} \
         qt5-qtbase-* \
         qt5-qttools* \
         qt5-qtsvg \
@@ -114,13 +114,14 @@ jobs:
       run: |
         export QT_SELECT=qt5
         echo ======= SYSTEM INFO ========
-        uname -a; gcc --version | grep "gcc"; python --version; qmake-qt5 --version
+        which python 2>/dev/null && export PYTHON_VERSION_SUFFIX= || export PYTHON_VERSION_SUFFIX=3
+        uname -a; gcc --version | grep "gcc"; python${PYTHON_VERSION_SUFFIX} --version; qmake-qt5 --version
         echo ============================
         qmake-qt5 -r PythonQt.pro CONFIG+=${{ matrix.configuration }} \
-          PYTHON_VERSION=$(python --version | cut -d " " -f 2 | cut -d "." -f1,2) \
-          PYTHON_DIR=$(which python | xargs dirname | xargs dirname)
-        make -j 2 && make check TESTARGS="-platform offscreen"
-      
+          PYTHON_VERSION=$(python${PYTHON_VERSION_SUFFIX} --version | cut -d " " -f 2 | cut -d "." -f1,2) \
+          PYTHON_DIR=$(which python${PYTHON_VERSION_SUFFIX} | xargs dirname | xargs dirname)
+        make -j $(nproc) && make check TESTARGS="-platform offscreen"
+
     - name: Generate Wrappers
       run: |
         # workaround to allow to find the Qt include dirs for installed standard qt packages
@@ -128,26 +129,22 @@ jobs:
         export QTDIR=/usr/include/qt5ln
         cd generator
         ./pythonqt_generator
-        
+
     - name: Upload Wrappers
       uses: actions/upload-artifact@v3
       with:
-        name: wrappers_centos7
+        name: wrappers_${{ matrix.container_os }}-${{ matrix.container_os_version }}_${{ matrix.configuration }}
         path: generated_cpp
 
   macOS:
     strategy:
       fail-fast: false
       matrix:
-       macos-version:  ['10.15']
-       python-version: ['2.7']
+       macos-version:  ['11']
+       python-version: ['3.6']
        qt-version: ['5.9.*']
        configuration: ['release','debug']
        include:
-         - macos-version: '11'
-           python-version: '3.6'
-           qt-version: '5.11.*'
-           configuration: 'release'
          - macos-version: '12'
            python-version: '3.11'
            qt-version: '5.12.*'
@@ -171,7 +168,7 @@ jobs:
         python-version: '${{ matrix.python-version }}'
 
     - name: Checkout PythonQt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Detect exact versions
       id : versions
@@ -201,13 +198,13 @@ jobs:
         for i in "python${{ steps.versions.outputs.PYTHON_VERSION_SHORT }}-embed" "python${{ steps.versions.outputs.PYTHON_VERSION_SHORT }}" \
                  "python${PYTHON_VERSION_MAJOR}-embed" "python${PYTHON_VERSION_MAJOR}"
         do if pkg-config --exists "$i"; then PYTHON_PKGCONFIG_NAME="$i"; break; fi; done
-        qmake CONFIG+=${{ matrix.configuration }} CONFIG+=sanitizer CONFIG+=sanitize_undefined \
+        qmake CONFIG+=${{ matrix.configuration }} CONFIG+=sanitizer CONFIG+=sanitize_undefined CONFIG+=sanitize_address \
           PYTHON_VERSION=${{ steps.versions.outputs.PYTHON_VERSION_SHORT }} \
           PYTHON_DIR="$pythonLocation" \
           PKGCONFIG+=$PYTHON_PKGCONFIG_NAME \
           -r PythonQt.pro
-        make -j 2
-        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        make -j $(nproc)
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
           make check TESTARGS="-platform offscreen"
 
     - name: Generate Wrappers
@@ -215,7 +212,8 @@ jobs:
       run: |
         cd generator
         # workaround to allow to find the Qt include dirs for installed standard qt packages
-        QTDIR=-UNDEFINED- ./pythonqt_generator --include-paths=$Qt5_Dir/lib
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        QTDIR=-UNDEFINED- ./pythonqt_generator --qt-version=${{ steps.versions.outputs.QT_VERSION_FULL }} --include-paths=$Qt5_Dir/lib
 
     - name: Upload Wrappers
       uses: actions/upload-artifact@v3
@@ -241,7 +239,7 @@ jobs:
 #           msvc-toolset: '14.16'
 
          - qt-arch: 'win32_mingw53'
-           python-version: '2.7'
+           python-version: '3.6'
            python-arch: 'x86'
            qt-version: '5.11.*'
 
@@ -257,7 +255,7 @@ jobs:
     steps:
 
     - name: Checkout PythonQt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Reset PATH
       uses: egor-tensin/cleanup-path@v3

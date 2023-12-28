@@ -62,8 +62,7 @@ public:
 
   bool isConstant() const;
   bool isVolatile() const;
-
-  QStringList cvString() const;
+  bool isMutable() const;
 
   void run(TypeSpecifierAST *node);
 

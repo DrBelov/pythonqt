@@ -48,6 +48,40 @@
 #include <QtCore/QMap>
 #include <QDebug>
 
+/* BEGIN: Qt6 compatibility.  The following can removed when versions of Qt
+ * prior to 5.14 are no longer supported.
+ */
+/* QString::SkipEmptyParts was replicated in Qt::SplitBehavior in 15.4 and the
+ * QString original deprecated then it was removed in Qt6.  This provides
+ * forward compatibility with Qt6 for versions of Qt prior to 15.4:
+ */
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+    namespace Qt {
+        const QString::SplitBehavior SkipEmptyParts = QString::SkipEmptyParts;
+    };
+#endif
+
+/* Global endl (::endl) is used extensively in the generator .cpp files.  This
+ * was supported by Qt until Qt6.  In Qt5.14 Qt::endl was added in anticipation
+ * of the Qt6 change and the use of global endl could be avoided (it does not
+ * seem to have been explicitly deprecated).  This gives backward compatibility
+ * for global endl in Qt6 (not Qt5, where global endl was still available).
+ *
+ * Note that 'constexpr' is available in Qt6 because Qt6 requires C++17;
+ * constexpr was introduced in C++11.  Likewise for decltype.  Qt::endl is a
+ * function so ::endl is a pointer to the function and the implicit conversion
+ * is used; this is to cause an compiler error in the future if the base type
+ * of Qt::endl changes.
+ *
+ * When versions of Qt older than 5.14 are no longer supported this can be
+ * removed however all the 'endl' references in the code will need to be
+ * changed to Qt::endl.
+ */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+    static constexpr decltype (Qt::endl) *endl = Qt::endl;
+#endif
+/* END: Qt compatibility. */
+
 class Indentor;
 
 class AbstractMetaType;
@@ -133,6 +167,9 @@ namespace TypeSystem {
 
     //! A better normalized signature, which takes care of PODs with the same name
     QByteArray normalizedSignature(const char* signature);
+
+    //! Determine version ID from version string
+    unsigned int qtVersionFromString(const QString& value, bool& ok);
 }
 
 struct ReferenceCount
@@ -512,6 +549,8 @@ public:
 
     virtual bool isNativeIdBased() const { return false; }
 
+    virtual TypeEntry* equivalentType() const { return nullptr; }
+
 private:
     QString m_name;
     Type m_type;
@@ -644,7 +683,8 @@ public:
         : TypeEntry(nspace.isEmpty() ? enumName : nspace + QLatin1String("::") + enumName,
                     EnumType),
           m_flags(0),
-          m_extensible(false)
+          m_extensible(false),
+          m_force_integer(false)
     {
         m_qualifier = nspace;
         m_java_name = enumName;
@@ -689,8 +729,8 @@ public:
     void addEnumValueRejection(const QString &name) { m_rejected_enums << name; }
     QStringList enumValueRejections() const { return m_rejected_enums; }
 
-    void addEnumValueRedirection(const QString &rejected, const QString &usedValue);
-    QString enumValueRedirection(const QString &value) const;
+    bool isEnumClass() const { return m_enum_class; }
+    void setEnumClass(bool enum_class) { m_enum_class = enum_class; }
 
     bool forceInteger() const { return m_force_integer; }
     void setForceInteger(bool force) { m_force_integer = force; }
@@ -705,11 +745,11 @@ private:
     QString m_upper_bound;
 
     QStringList m_rejected_enums;
-    QList<EnumValueRedirection> m_enum_redirections;
 
     FlagsTypeEntry *m_flags;
 
     bool m_extensible;
+    bool m_enum_class;
     bool m_force_integer;
 };
 
@@ -750,7 +790,7 @@ class ComplexTypeEntry : public TypeEntry
 public:
     enum TypeFlag {
         ForceAbstract      = 0x1,
-	    DeleteInMainThread = 0x2,
+        DeleteInMainThread = 0x2,
         Deprecated         = 0x4
     };
     typedef QFlags<TypeFlag> TypeFlags;
@@ -763,6 +803,7 @@ public:
           m_generic_class(false),
           m_createShell(false),
           m_createPromoter(false),
+          m_noCopy(false),
           m_type_flags(0)
     {
         Include inc;
@@ -893,6 +934,9 @@ public:
     bool isGenericClass() const { return m_generic_class; }
     void setGenericClass(bool isGeneric) { m_generic_class = isGeneric; }
 
+    bool hasNoCopy() const { return m_noCopy; }
+    void setNoCopy(bool noCopy) { m_noCopy = noCopy; }
+
 private:
     IncludeList m_extra_includes;
     Include m_include;
@@ -910,6 +954,7 @@ private:
     uint m_generic_class : 1;
     uint m_createShell : 1;
     uint m_createPromoter : 1;
+    uint m_noCopy : 1;
 
     QString m_polymorphic_id_value;
     QString m_lookup_name;
@@ -970,8 +1015,14 @@ public:
 
     virtual bool isNativeIdBased() const { return true; }
 
+    virtual TypeEntry* equivalentType() const { return _equivalentType; }
+    void setEquivalentType(TypeEntry* typeEntry) { _equivalentType = typeEntry; }
+
 protected:
     ValueTypeEntry(const QString &name, Type t) : ComplexTypeEntry(name, t) { }
+
+private:
+  TypeEntry* _equivalentType{};
 };
 
 
@@ -1159,7 +1210,8 @@ public:
         foreach (const QString &_warning, m_suppressedWarnings) {
             QString warning(QString(_warning).replace("\\*", "&place_holder_for_asterisk;"));
 
-            QStringList segs = warning.split("*", QString::SkipEmptyParts);
+            QStringList segs = warning.split("*", Qt::SkipEmptyParts);
+
             if (segs.size() == 0)
                 continue ;
 
@@ -1181,7 +1233,8 @@ public:
     static QString globalNamespaceClassName(const TypeEntry *te);
     QString filename() const { return "typesystem.txt"; }
 
-    bool parseFile(const QString &filename, bool generate = true);
+    bool parseFile(const QString &filename, unsigned int qtVersion, bool generate = true);
+    void finalSetup();
 
 private:
     bool m_suppressWarnings;

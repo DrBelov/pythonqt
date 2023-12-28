@@ -127,21 +127,6 @@ void TypeCompiler::visitName(NameAST *node)
   _M_type = name_cc.qualifiedName();
 }
 
-QStringList TypeCompiler::cvString() const
-{
-  QStringList lst;
-
-  foreach (int q, cv())
-    {
-      if (q == Token_const)
-        lst.append(QLatin1String("const"));
-      else if (q == Token_volatile)
-        lst.append(QLatin1String("volatile"));
-    }
-
-  return lst;
-}
-
 bool TypeCompiler::isConstant() const
 {
   return _M_cv.contains(Token_const);
@@ -150,6 +135,11 @@ bool TypeCompiler::isConstant() const
 bool TypeCompiler::isVolatile() const
 {
   return _M_cv.contains(Token_volatile);
+}
+
+bool TypeCompiler::isMutable() const
+{
+  return _M_cv.contains(Token_mutable);
 }
 
 // kate: space-indent on; indent-width 2; replace-tabs on;

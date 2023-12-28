@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <algorithm> // for std::sort
+
 #include "shellheadergenerator.h"
 
 #include <QtCore/QDir>
@@ -98,10 +100,12 @@ static bool field_lessThan(const AbstractMetaField* a, const AbstractMetaField* 
 
 void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_class)
 {
+  setCurrentScope(meta_class);
   QString builtIn = ShellGenerator::isBuiltIn(meta_class->name()) ? "_builtin" : "";
-  QString pro_file_name = meta_class->package().replace(".", "_") + builtIn + "/" + meta_class->package().replace(".", "_") + builtIn + ".pri";
+  QString fileBaseName = toFileNameBase(meta_class->package() + builtIn);
+  QString pro_file_name = fileBaseName + "/" + fileBaseName + ".pri";
   priGenerator->addHeader(pro_file_name, fileNameForClass(meta_class));
-  setupGenerator->addClass(meta_class->package().replace(".", "_") + builtIn, meta_class);
+  setupGenerator->addClass(meta_class->package() + builtIn, meta_class);
 
   QString include_block = "PYTHONQTWRAPPER_" + meta_class->name().toUpper() + "_H";
 
@@ -115,7 +119,7 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
   s << "#include <PythonQt.h>" << endl << endl;
 
   IncludeList list = meta_class->typeEntry()->extraIncludes();
-  qSort(list.begin(), list.end());
+  std::sort(list.begin(), list.end());
   for (const Include & inc :  list) {
     ShellGenerator::writeInclude(s, inc);
   }
@@ -185,7 +189,7 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
       << " : public " << meta_class->qualifiedCppName() << endl << "{ public:" << endl;
 
     AbstractMetaEnumList enums1 = meta_class->enums();
-    qSort(enums1.begin(), enums1.end(), enum_lessThan);
+    std::sort(enums1.begin(), enums1.end(), enum_lessThan);
     for (AbstractMetaEnum * enum1 :  enums1) {
       if (enum1->wasProtected()) {
         s << "enum " << enum1->name() << "{" << endl;
@@ -218,6 +222,11 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
         if (!fun->isStatic()) {
           // always do a direct call, since we want to call the real virtual function here
           s << "this->";
+        }
+        if (fun->originalName() == "operator=") {
+          // make it clear we don't want to call the (automatically generated)
+          // assignment operator of the promoter
+          s << meta_class->qualifiedCppName() << "::";
         }
         s << fun->originalName() << "(";
         writePromoterArgs(args, s);
@@ -263,7 +272,7 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
   s << "public:" << endl;
 
   AbstractMetaEnumList enums1 = meta_class->enums();
-  qSort(enums1.begin(), enums1.end(), enum_lessThan);
+  std::sort(enums1.begin(), enums1.end(), enum_lessThan);
   AbstractMetaEnumList enums;
   QList<FlagsTypeEntry*> flags;
   for (AbstractMetaEnum * enum1 :  enums1) {
@@ -300,14 +309,26 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
     }
 
     for (AbstractMetaEnum * enum1 :  enums) {
-      s << "enum " << enum1->name() << "{" << endl;
+      bool isEnumClass = enum1->typeEntry()->isEnumClass();
+      s << "enum " << (isEnumClass ? "class " : "") << enum1->name() << "{" << endl;
       bool first = true;
-      QString scope = enum1->wasProtected() ? promoterClassName(meta_class) : meta_class->qualifiedCppName();
+      QString scope = meta_class->isGlobalNamespace() ? QString() :
+          (enum1->wasProtected() ? promoterClassName(meta_class) : meta_class->qualifiedCppName());
+      if (isEnumClass) {
+        scope += "::" + enum1->name();
+      }
 
       for (AbstractMetaEnumValue * value :  enum1->values()) {
         if (first) { first = false; }
         else { s << ", "; }
-        s << "  " << value->name() << " = " << scope << "::" << value->name();
+        QString assignedValue = scope + "::" + value->name();
+        if (isEnumClass) {
+          s << "  " << value->name() << " = " << "static_cast<int>(" << scope << "::" << value->name() << ")";
+        }
+        else {
+          s << "  " << value->name() << " = " << scope << "::" << value->name();
+
+        }
       }
       s << "};" << endl;
     }
@@ -345,7 +366,8 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
     }
 
     if (meta_class->typeEntry()->isValue()
-      && !copyConstructorSeen && defaultConstructorSeen) {
+      && !copyConstructorSeen && defaultConstructorSeen && !meta_class->typeEntry()->hasNoCopy())
+    {
       QString className = meta_class->generateShellClass() ? shellClassName(meta_class) : meta_class->qualifiedCppName();
       s << meta_class->qualifiedCppName() << "* new_" << meta_class->name() << "(const " << meta_class->qualifiedCppName() << "& other) {" << endl;
       s << className << "* a = new " << className << "();" << endl;
@@ -409,7 +431,7 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
   }
 
   AbstractMetaFieldList fields = meta_class->fields();
-  qSort(fields.begin(), fields.end(), field_lessThan);
+  std::sort(fields.begin(), fields.end(), field_lessThan);
 
   // TODO: move "So" check to typesystem, e.g. allow star in rejection...
   // Field accessors
@@ -429,7 +451,7 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
 
   s << "#endif // " << include_block << endl;
 
-
+  setCurrentScope(nullptr);
 }
 
 void ShellHeaderGenerator::writePromoterArgs(AbstractMetaArgumentList& args, QTextStream& s)

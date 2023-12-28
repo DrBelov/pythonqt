@@ -4,12 +4,12 @@
 # $Source$
 # --------------------------------------------------
 
-TARGET   = PythonQt-Qt5-PythonXY
+TARGET = PythonQt-Qt$${QT_MAJOR_VERSION}-PythonXY
 TEMPLATE = lib
 
 DESTDIR    = $$OUT_PWD/../lib
 
-CONFIG += qt
+CONFIG += qt msvc_mp
 CONFIG -= flat
 
 # allow to choose static linking through the environment variable PYTHONQT_STATIC
@@ -25,11 +25,15 @@ isEmpty(PYTHONQT_STATIC) {
 
 DEFINES += PYTHONQT_CATCH_ALL_EXCEPTIONS
 
-contains(QT_MAJOR_VERSION, 5) {
-  QT += widgets core-private
-}
- 
+QT += widgets core-private
+
 INCLUDEPATH += $$PWD
+
+macx {
+  contains(QT_MAJOR_VERSION, 6) {
+    QMAKE_APPLE_DEVICE_ARCHS = x86_64 arm64
+  }
+}
 
 include ( ../build/common.prf )  
 include ( ../build/python.prf )

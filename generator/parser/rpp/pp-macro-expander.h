@@ -71,6 +71,9 @@ class pp_macro_expander
 
   std::string const *resolve_formal (pp_fast_string const *_name)
   {
+    static const pp_fast_string va_args_name("__VA_ARGS__", 11);
+    static std::string empty("");
+
     assert (_name != 0);
 
     if (! frame)
@@ -78,7 +81,10 @@ class pp_macro_expander
 
     assert (frame->expanding_macro != 0);
 
-    std::vector<pp_fast_string const *> const formals = frame->expanding_macro->formals;
+    std::vector<pp_fast_string const *> formals = frame->expanding_macro->formals;
+    if (frame->expanding_macro->is.variadics)
+      formals.push_back(&va_args_name);
+
     for (std::size_t index = 0; index < formals.size(); ++index)
       {
         pp_fast_string const *formal = formals[index];
@@ -88,6 +94,10 @@ class pp_macro_expander
 
         else if (frame->actuals && index < frame->actuals->size())
           return &(*frame->actuals)[index];
+
+        else if (frame->expanding_macro->is.variadics && index == formals.size()-1)
+          // variadic argument may also be missing, replace with empty then
+          return &empty;
 
         else
           assert (0); // internal error?
@@ -250,7 +260,7 @@ public:
             static bool hide_next = false; // ### remove me
 
             pp_macro *macro = env.resolve (name_buffer, name_size);
-            if (! macro || macro->hidden || hide_next)
+            if (! macro || macro->is.hidden || hide_next)
               {
                 hide_next = ! strcmp (name_buffer, "defined");
 
@@ -278,13 +288,13 @@ public:
                 continue;
               }
 
-            if (! macro->function_like)
+            if (! macro->is.function_like)
               {
                 pp_macro *m = 0;
 
                 if (macro->definition)
                   {
-                    macro->hidden = true;
+                    macro->is.hidden = true;
 
                     std::string tmp;
                     tmp.reserve (256);
@@ -316,7 +326,7 @@ public:
                           std::copy (tmp.begin (), tmp.end (), _result);
                       }
 
-                    macro->hidden = false;
+                    macro->is.hidden = false;
                   }
 
                 if (! m)
@@ -370,15 +380,15 @@ public:
               _first = arg_it;
 
 #if 0 // ### enable me
-              assert ((macro->variadics && macro->formals.size () >= actuals.size ())
+              assert ((macro->is.variadics && macro->formals.size () >= actuals.size ())
                           || macro->formals.size() == actuals.size());
 #endif
 
               pp_frame frame (macro, &actuals);
               pp_macro_expander expand_macro (env, &frame);
-              macro->hidden = true;
+              macro->is.hidden = true;
               expand_macro (macro->definition->begin (), macro->definition->end (), _result);
-              macro->hidden = false;
+              macro->is.hidden = false;
               generated_lines += expand_macro.lines;
           }
         else
@@ -394,7 +404,7 @@ public:
   {
     InputIterator arg_end = skip_argument (_first, _last);
 
-    while (_macro->variadics && _first != arg_end && arg_end != _last && *arg_end == ','
+    while (_macro->is.variadics && _first != arg_end && arg_end != _last && *arg_end == ','
         && (_actuals.size () + 1) == _macro->formals.size ())
       {
         arg_end = skip_argument (++arg_end, _last);

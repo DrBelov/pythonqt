@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <algorithm> // for std::sort, std::stable_sort
+
 #include "setupgenerator.h"
 #include "shellgenerator.h"
 #include "reporthandler.h"
@@ -49,10 +51,6 @@ void SetupGenerator::addClass(const QString& package, const AbstractMetaClass *c
 {
   packHash[package].append(cls);
 }
-
-void maybeDeclareMetaType(QTextStream &stream, const QString &typeName,
-                          QSet<QString> &registeredTypeNames);
-bool hasDefaultConstructor(const AbstractMetaClass *meta_class);
 
 static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
   QSet<QString> operatorCodes;
@@ -65,7 +63,13 @@ static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
     }
   }
   QSet<QString> r;
-  for (QString op :  operatorCodes.toList()) {
+  for (QString op :
+#       if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+              operatorCodes.toList()
+#       else
+              QStringList(operatorCodes.begin(), operatorCodes.end())
+#       endif
+      ) {
     if (op == ">" || op == "<" || op == ">=" || op == "<=" || op == "==" || op == "!=") {
       r.insert("PythonQt::Type_RichCompare");
     } else if (op == "+") {
@@ -113,7 +117,7 @@ static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
     CodeSnipList code_snips = cls->typeEntry()->codeSnips();
     for (const CodeSnip &cs :  code_snips) {
       if (cs.language == TypeSystem::PyWrapperOperators) {
-        QStringList values = cs.code().split(" ", QString::SkipEmptyParts);
+        QStringList values = cs.code().split(" ", Qt::SkipEmptyParts);
         for (QString value :  values) {
           r.insert(value);
         }
@@ -122,14 +126,13 @@ static QStringList getOperatorCodes(const AbstractMetaClass* cls) {
   }
 
 
-  QStringList result = r.toList();
-  qSort(result);
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+      QStringList result = r.toList();
+#else
+      QStringList result(r.begin(), r.end());
+#endif
+  std::sort(result.begin(), result.end());
   return result;
-}
-
-static bool class_less_than(const AbstractMetaClass *a, const AbstractMetaClass *b)
-{
-  return a->name() < b->name();
 }
 
 static QSet<QString> _builtinListTypes = QSet<QString>() << "QByteArray"
@@ -146,7 +149,10 @@ static QSet<QString> _builtinListTypes = QSet<QString>() << "QByteArray"
 << "QLineF"
 << "QPoint"
 << "QPointF"
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 << "QRegExp"
+#endif
+<< "QRegularExpression"
 << "QFont"
 << "QPixmap"
 << "QBrush"
@@ -163,7 +169,11 @@ static QSet<QString> _builtinListTypes = QSet<QString>() << "QByteArray"
 << "QPen"
 << "QTextLength"
 << "QTextFormat"
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 << "QMatrix"
+#endif
+<< "QTransform"
+<< "QMatrix4x4"
 << "QVariant";
 
 static void addListRegistration(AbstractMetaType* type, QSet<QString>& output) {
@@ -223,7 +233,7 @@ void SetupGenerator::generate()
       }
     }
   }
-  qSort(classes_with_polymorphic_id.begin(), classes_with_polymorphic_id.end(), class_less_than);
+  classes_with_polymorphic_id.sort();
 
   QHashIterator<QString, QList<const AbstractMetaClass*> > pack(packHash);
   while (pack.hasNext()) {
@@ -231,36 +241,13 @@ void SetupGenerator::generate()
     QList<const AbstractMetaClass*> list = pack.value();
     if (list.isEmpty())
       continue;
-    qSort(list.begin(), list.end(), class_less_than);
+    std::stable_sort(list.begin(), list.end(), AbstractMetaClass::less_than);
 
-    QString packKey = pack.key();
-    QString packName = pack.key();
-    QStringList components = packName.split("_");
-    if ((components.size() > 2) && (components.at(0) == "com")
-      && (components.at(1) == "trolltech")) {
-        // kill com.trolltech in key
-        components.removeAt(0);
-        components.removeAt(0);
-    }
-
-    QString shortPackName;
-    foreach (QString comp, components) {
-      comp[0] = comp[0].toUpper();
-      shortPackName += comp;
-    }
-    // add missing camel case (workaround..)
-    if (shortPackName == "QtWebkit") {
-      shortPackName = "QtWebKit";
-    } else if (shortPackName == "QtXmlpatterns") {
-      shortPackName = "QtXmlPatterns";
-    } else if (shortPackName == "QtWebenginewidgets") {
-      shortPackName = "QtWebEngineWidgets";
-    } else if (shortPackName == "QtOpengl") {
-      shortPackName = "QtOpenGL";
-    } else if (shortPackName == "QtUitools") {
-      shortPackName = "QtUiTools";
-    }
-
+    QString packKey = ShellGenerator::toFileNameBase(pack.key());
+    QString packName = packKey;
+    QString qtPackageName = "Qt" + pack.key().split('.').back().split('_').front();
+    bool isBuiltin = packKey.endsWith("_builtin");
+    QString initName = qtPackageName + (isBuiltin ? "Builtin" : "");
 
     {
       QString fileName(packName + "/" + packKey + "_init.cpp");
@@ -271,13 +258,13 @@ void SetupGenerator::generate()
       s << "#include <PythonQt.h>" << endl;
       s << "#include <PythonQtConversion.h>" << endl;
 
-      for (int i=0; i<(list.count()+MAX_CLASSES_PER_FILE-1) / MAX_CLASSES_PER_FILE; i++) {
+      for (int i=0; i<(list.count()+ maxClassesPerFile -1) / maxClassesPerFile; i++) {
         s << "#include \"" << packKey << QString::number(i) << ".h\"" << endl;
       }
       s << endl;
 
       QStringList polymorphicHandlers;
-      if (!packName.endsWith("_builtin")) {
+      if (!isBuiltin) {
         polymorphicHandlers = writePolymorphicHandler(s, list.at(0)->package(), classes_with_polymorphic_id, list);
         s << endl;
       }
@@ -314,11 +301,7 @@ void SetupGenerator::generate()
       s << endl;
 
       // declare individual class creation functions
-      s << "void PythonQt_init_" << shortPackName << "(PyObject* module) {" << endl;
-
-      if (shortPackName.endsWith("Builtin")) {
-        shortPackName = shortPackName.mid(0, shortPackName.length()-strlen("builtin"));
-      }
+      s << "void PythonQt_init_" << initName << "(PyObject* module) {" << endl;
 
       foreach (const AbstractMetaClass *cls, list) {
         if (cls->qualifiedCppName().contains("Ssl")) {
@@ -353,10 +336,12 @@ void SetupGenerator::generate()
           operatorCodes = "0";
         }
         if (cls->isQObject()) {
-          s << "PythonQt::priv()->registerClass(&" << cls->qualifiedCppName() << "::staticMetaObject, \"" << shortPackName <<"\", PythonQtCreateObject<PythonQtWrapper_" << cls->name() << ">" << shellCreator << ", module, " << operatorCodes <<");" << endl;
+          s << "PythonQt::priv()->registerClass(&" << cls->qualifiedCppName() << "::staticMetaObject, \"" << qtPackageName <<"\", PythonQtCreateObject<PythonQtWrapper_" << cls->name() << ">" << shellCreator << ", module, " << operatorCodes <<");" << endl;
+        } else if (cls->isGlobalNamespace()) {
+          s << "PythonQt::priv()->registerGlobalNamespace(\"" << cls->qualifiedCppName() << "\", \"" << qtPackageName << "\", PythonQtCreateObject<PythonQtWrapper_" << cls->name() << ">, PythonQtWrapper_" << cls->name() << "::staticMetaObject, module); " << endl;
         } else {
           QString baseName = cls->baseClass()?cls->baseClass()->qualifiedCppName():"";
-          s << "PythonQt::priv()->registerCPPClass(\""<< cls->qualifiedCppName() << "\", \"" << baseName << "\", \"" << shortPackName <<"\", PythonQtCreateObject<PythonQtWrapper_" << cls->name() << ">" << shellCreator << ", module, " << operatorCodes <<");" << endl;
+          s << "PythonQt::priv()->registerCPPClass(\""<< cls->qualifiedCppName() << "\", \"" << baseName << "\", \"" << qtPackageName <<"\", PythonQtCreateObject<PythonQtWrapper_" << cls->name() << ">" << shellCreator << ", module, " << operatorCodes <<");" << endl;
         }
         for (AbstractMetaClass* interface :  cls->interfaces()) {
           // the interface might be our own class... (e.g. QPaintDevice)
@@ -374,7 +359,11 @@ void SetupGenerator::generate()
       }
       s << endl;
 
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
       QStringList list = listRegistration.toList();
+#else
+      QStringList list(listRegistration.begin(), listRegistration.end());
+#endif
       list.sort();
       Q_FOREACH(QString name, list) {
         if (name.contains("Ssl")) {

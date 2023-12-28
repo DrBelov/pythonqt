@@ -71,6 +71,7 @@ public:
     AbstractMetaClass *findClass(const QString &name) const;
     AbstractMetaEnumValue *findEnumValue(const QString &string) const;
     AbstractMetaEnum *findEnum(const EnumTypeEntry *entry) const;
+    void sort();
 
 };
 
@@ -410,6 +411,7 @@ public:
 
     AbstractMetaFunction() :
           m_constant(false),
+          m_constexpr(false),
           m_invalid(false)
     {
     }
@@ -487,6 +489,12 @@ public:
     bool isConstant() const { return m_constant; }
     void setConstant(bool constant) { m_constant = constant; }
 
+    bool isConstexpr() const { return m_constexpr; }
+    void setConstexpr(bool constant) { m_constexpr = constant; }
+
+    bool isAuto() const { return m_auto; }
+    void setAuto(bool isAuto) { m_auto = isAuto; }
+
     QString exception() const { return m_exception; }
     void setException(const QString &exception) { m_exception = exception; }
     QString toString() const { return m_name; }
@@ -550,6 +558,8 @@ private:
     AbstractMetaArgumentList m_arguments;
     QString m_exception;
     uint m_constant                 : 1;
+    uint m_constexpr                : 1;
+    uint m_auto                     : 1;
     uint m_invalid                  : 1;
 };
 
@@ -665,6 +675,8 @@ public:
           m_has_equals_operator(false),
           m_has_clone_operator(false),
           m_is_type_alias(false),
+          m_has_actual_declaration(false),
+          m_is_global_namespace(false),
           m_qDebug_stream_function(0)
     {
     }
@@ -677,6 +689,7 @@ public:
     AbstractMetaFunctionList functions() const { return m_functions; }
     void setFunctions(const AbstractMetaFunctionList &functions);
     void addFunction(AbstractMetaFunction *function);
+    void removeFunction(AbstractMetaFunction* function);
     bool hasFunction(const AbstractMetaFunction *f) const;
     bool hasFunction(const QString &str) const;
     bool hasSignal(const AbstractMetaFunction *f) const;
@@ -786,6 +799,12 @@ public:
     void setHasCloneOperator(bool on) { m_has_clone_operator = on; }
     bool hasCloneOperator() const { return m_has_clone_operator; }
 
+    void setHasActualDeclaration(bool on) { m_has_actual_declaration = on; }
+    bool hasActualDeclaration() const { return m_has_actual_declaration; }
+
+    void setIsGlobalNamespace(bool on) { m_is_global_namespace = on; }
+    bool isGlobalNamespace() const { return m_is_global_namespace; }
+
     QString getDefaultNonZeroFunction() const;
 
     void addPropertySpec(QPropertySpec *spec) { m_property_specs << spec; }
@@ -826,6 +845,11 @@ public:
       return qualifiedCppName() < a.qualifiedCppName();
     }
 
+    static bool less_than(const AbstractMetaClass *cl,
+            const AbstractMetaClass *cr) {
+        return cl->name() < cr->name();
+    }
+
 private:
     uint m_namespace : 1;
     uint m_qobject : 1;
@@ -841,7 +865,9 @@ private:
     uint m_has_equals_operator : 1;
     uint m_has_clone_operator :1;
     uint m_is_type_alias : 1;
-    uint m_reserved : 18;
+    uint m_has_actual_declaration : 1;
+    uint m_is_global_namespace : 1;
+    uint m_reserved : 16;
     QString m_destructor_exception;
 
     const AbstractMetaClass *m_enclosing_class{};

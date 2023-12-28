@@ -38,7 +38,6 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
 // We need to force the endianess in Qt5
 #define Q_BYTE_ORDER Q_LITTLE_ENDIAN
 
@@ -48,11 +47,58 @@
 #define QOPENGLFUNCTIONS_H
 #define QOPENGLEXTRAFUNCTIONS_H
 
-// our compiler can't handle the templates for singleShot (int Qt 5.12), but we can circumvent this with
-// Q_CLANG_QDOC for the moment:
-#define Q_CLANG_QDOC
-#include <QtCore/QTimer>
-#undef Q_CLANG_QDOC
+/* This must only be included after 'QT_NO_' definitions have been defined. */
+#include <QtCore/qglobal.h>
+
+/* NOTE: Qt5.12 and later (including Qt6) uses template functions for the
+ * static implementations of QTimer::singleShot() (the function, not the
+ * property).  The generator does not handle template functions.  Defining
+ * Q_CLANG_QDOC works around this by exposing the non-template forms that
+ * appear in the documentation at the same time as hiding the templates.
+ * Without this the QTimer::singleShot functions do not appear in the PythonQt
+ * interface.
+ *
+ * Unfortunately the work around breaks precompilation in Qt5.11 because it
+ * causes duplicate definitions of some text handling functions (they really
+ * are duplicated if Q_CLANG_QDOC is turned on) so the change must be version
+ * specific.
+ *
+ * This does not work in Qt6 because Qt6 uses Q_QDOC for the documentation and
+ * needs other fixes.
+ */
+#if QT_VERSION_MAJOR == 5 && QT_VERSION_MINOR > 11
+#   include <QtCore/QObject>  // included by QtCore/QTimer
+#   define Q_CLANG_QDOC
+#   include <QtCore/QTimer>
+#   undef Q_CLANG_QDOC
+#endif
+
+// it seems this can be safely ignored (otherwise generator currently stumbles over use of noexcept):
+#define Q_DECLARE_SHARED(TYPE)
+#define Q_DECLARE_SHARED_NOT_MOVABLE_UNTIL_QT6(TYPE)
+
+// also ignore deprecation macros for now:
+#define QT_DEPRECATED_VERSION_X_5(minor, text)
+#define QT_DEPRECATED_VERSION_X(major, minor, text)
+
+#define QT_DEPRECATED_VERSION_5(minor)
+#define QT_DEPRECATED_VERSION(major, minor)
+
+// we also don't use this:
+#define Q_CLASSINFO(name, value)
+#define Q_PRIVATE_PROPERTY(d, text)
+
+// treat QDOC_PROPERTY like Q_PROPERTY
+#define QDOC_PROPERTY(text) Q_PROPERTY(text)
+
+// don't need this:
+#define Q_REVISION(v)
+#define Q_DECLARE_OPERATORS_FOR_FLAGS(x)
+
+#include <QtCore/QMetaType>
+
+// parse still stumbles over this declaration
+#define QT_DECL_METATYPE_EXTERN_TAGGED(TYPE, TAG, EXPORT)
 
 #include <QtCore/QtCore>
 #include <QtGui/QtGui>
@@ -60,6 +106,10 @@
 #include <QtSql/QtSql>
 #include <QtSvg/QtSvg>
 #include <QtXml/QtXml>
+
+#if QT_VERSION >= 0x060000
+#include <QtSvgWidgets/QtSvgWidgets>
+#endif
 
 #include <QtUiTools/QtUiTools>
 
@@ -77,8 +127,10 @@
 #include <QtQuickWidgets/QtQuickWidgets>
 #endif
 
+#if QT_VERSION < 0x060000
 #ifndef QT_NO_XMLPATTERNS
 #  include <QtXmlPatterns/QtXmlPatterns>
+#endif
 #endif
 
 #ifndef QT_NO_WEBKIT
@@ -1182,4 +1234,8 @@
 #define GL_LOGIC_OP GL_INDEX_LOGIC_OP
 #define GL_TEXTURE_COMPONENTS GL_TEXTURE_INTERNAL_FORMAT
 #include <QtOpenGL/QtOpenGL>
+#if QT_VERSION >= 0x060000
+#include <QtOpenGLWidgets/QtOpenGLWidgets>
+#endif
+
 #endif // QT_NO_OPENGL

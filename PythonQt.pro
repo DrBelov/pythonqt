@@ -19,8 +19,10 @@ win32 {
 }
 
 unix {
-    PYTHON_VERSION_CMD = $$system(python3 --version)
-    isEqual($$system({$$PYTHON_VERSION_CMD:0:8}),Python 3) {
+    PYTHON_VERSION_CMD = $$system(python3.11 --version)
+    PYTHON_VERSION_CMD_CUT = $$split(PYTHON_VERSION_CMD, .)
+    PYTHON_VERSION_CMD_CUT_FIRST = $$member(PYTHON_VERSION_CMD_CUT,0,1)
+    isEqual(PYTHON_VERSION_CMD_CUT_FIRST,Python 3) {
         PYTHON_INSTALLED = True
     } else {
         PYTHON_INSTALLED = False

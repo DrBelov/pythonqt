@@ -71,7 +71,7 @@ jobs:
         ./pythonqt_generator
 
     - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wrappers_ubuntu_${{ matrix.container_version }}
         path: generated_cpp
@@ -167,7 +167,7 @@ jobs:
         archives: 'qtmultimedia qtmacextras qtbase qttools'
 
     - name: Setup Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '${{ matrix.python-version }}'
 
@@ -220,7 +220,7 @@ jobs:
         QTDIR=-UNDEFINED- ./pythonqt_generator --qt-version=${{ steps.versions.outputs.QT_VERSION_FULL }} --include-paths=$Qt5_Dir/lib
 
     - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wrappers_macos${{ steps.versions.outputs.MACOS_VERSION_SHORT }}_qt${{ steps.versions.outputs.QT_VERSION_SHORT }}
         path: generated_cpp
@@ -262,7 +262,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Reset PATH
-      uses: egor-tensin/cleanup-path@v3
+      uses: egor-tensin/cleanup-path@v4
 
     - name: Install MSVC++
       uses: ilammy/msvc-dev-cmd@v1
@@ -330,7 +330,7 @@ jobs:
         pythonqt_generator
 
     - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wrappers_${{ matrix.qt-arch }}_${{ steps.versions.outputs.QT_VERSION_SHORT }}
         path: generated_cpp

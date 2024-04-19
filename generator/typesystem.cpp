@@ -239,24 +239,25 @@ private:
 
 bool Handler::error(const QXmlParseException &e)
 {
-    qWarning("Error: line=%d, column=%d, message=%s\n",
-             e.lineNumber(), e.columnNumber(), qPrintable(e.message()));
+    qWarning() << "Error: line=" << e.lineNumber()
+        << ", column=" << e.columnNumber()
+        << ", message=" << e.message() << "\n";
     return false;
 }
 
 bool Handler::fatalError(const QXmlParseException &e)
 {
-    qWarning("Fatal error: line=%d, column=%d, message=%s\n",
-             e.lineNumber(), e.columnNumber(), qPrintable(e.message()));
-
+    qWarning() << "Fatal error: line=" << e.lineNumber()
+        << ", column=" << e.columnNumber()
+        << ", message=" << e.message() << "\n";
     return false;
 }
 
 bool Handler::warning(const QXmlParseException &e)
 {
-    qWarning("Warning: line=%d, column=%d, message=%s\n",
-             e.lineNumber(), e.columnNumber(), qPrintable(e.message()));
-
+    qWarning() << "Warning: line=" << e.lineNumber()
+        << ", column=" << e.columnNumber()
+        << ", message=" << e.message() << "\n";
     return false;
 }
 
@@ -1567,6 +1568,7 @@ TypeDatabase::TypeDatabase() : m_suppressWarnings(true)
     addType(new ContainerTypeEntry("QMap", ContainerTypeEntry::MapContainer));
     addType(new ContainerTypeEntry("QHash", ContainerTypeEntry::HashContainer));
     addType(new ContainerTypeEntry("QPair", ContainerTypeEntry::PairContainer));
+    addType(new ContainerTypeEntry("std::pair", ContainerTypeEntry::PairContainer));
     addType(new ContainerTypeEntry("QQueue", ContainerTypeEntry::QueueContainer));
     addType(new ContainerTypeEntry("QMultiMap", ContainerTypeEntry::MultiMapContainer));
 
@@ -1736,7 +1738,7 @@ QString ContainerTypeEntry::targetLangName() const
         //     case MultiHashCollectio: return "MultiHash";
     case PairContainer: return "QPair";
     default:
-        qWarning("bad type... %d", m_type);
+        qWarning() << "bad type... " << m_type;
         break;
     }
     return QString();
@@ -2146,4 +2148,3 @@ unsigned int TypeSystem::qtVersionFromString(const QString& value, bool& ok)
   }
   return result;
 }
-

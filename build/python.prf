@@ -89,6 +89,7 @@ contains(PKGCONFIG, "python.*"){
   equals(QT_MINGW_BIT, 64){
     PYTHON_PATH = C:/Users/$$(USERNAME)/AppData/Local/Programs/Python/Python$${PYTHON_VERSION_MAJOR}$${PYTHON_VERSION_MINOR}
   }
+  isEmpty(PYTHON_PATH):PYTHON_PATH = C:/Users/$$(USERNAME)/AppData/Local/Programs/Python/Python$${PYTHON_VERSION_MAJOR}$${PYTHON_VERSION_MINOR}
 
   isEmpty(PYTHON_PATH):PYTHON_PATH=$(PYTHON_PATH)
   isEmpty(PYTHON_PATH)|!exists("$$PYTHON_PATH\\include") | !exists("$$PYTHON_PATH\\libs\\") {
